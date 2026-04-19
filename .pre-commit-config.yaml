@@ -1,33 +1,16 @@
-# luwi-script/.pre-commit-config.yaml
+# .pre-commit-config.yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0  # mantenha atualizado
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
 
-  - repo: https://github.com/rust-lang/rust-clippy
-    rev: ""
+  # Hook local para rodar clippy no workspace
+  - repo: local
     hooks:
       - id: clippy
+        name: rust clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
         stages: [commit]
-        args: [--all-targets, --all-features, -- -D warnings]
-
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    exclude: \.toml$
-    hooks:
-      - id: black
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-
-default_language_version:
-  python: python3
-
-default_stages:
-  - commit
