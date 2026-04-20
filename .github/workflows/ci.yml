@@ -38,5 +38,5 @@ jobs:
 
       - name: Run cargo clippy
         run: |
-          cd compiler/src/
-          cargo clippy --all-targets --all-features -- -D warnings
+          cd luwi-script
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
