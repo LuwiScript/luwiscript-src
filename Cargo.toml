@@ -1,0 +1,28 @@
+# luwi-script/Cargo.toml
+
+[package]
+name = "luwi-script"
+version = "0.1.0"
+edition = "2026"
+authors = ["Lucas Gabriel Witchemichen"]
+description = "LuwiScript compiler and runtime for corporate systems"
+license = "MIT"
+repository = "https://github.com/LuwiScript/luwiscript-src"
+readme = "README.md"
+keywords = ["compiler", "rust", "programming-language", "corporate"]
+categories = ["development-tools", "compilers"]
+
+[workspace]
+members = [
+  "compiler",
+  "runtime",
+  "toolchain/fmt",
+  "toolchain/linter",
+]
+
+[dependencies]
+# Aqui você adicionará dependencies conforme o projeto evolui,
+# por exemplo, parser (pest, lalrpop, etc.) ou runtime libs.
+
+[dev-dependencies]
+# Por exemplo, testes de helper, mocks, etc.
