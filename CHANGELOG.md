@@ -1,6 +1,6 @@
 # Changelog
 
-Todos os commits significativos e mudanças de funcionalidades seguem o formato [Conventional Commits][1].  
+Todos os commits significativos e mudanças de funcionalidades seguem o formato [Conventional Commits][1].
 Este changelog acompanha as versões principais e secundárias do projeto LuwiScript.
 
 ---
@@ -43,7 +43,7 @@ Este changelog acompanha as versões principais e secundárias do projeto LuwiSc
 
 ## Versioning
 
-As versões seguem o padrão **SemVer**: `MAJOR.MINOR.PATCH`, por exemplo: `v0.1.0`.  
+As versões seguem o padrão **SemVer**: `MAJOR.MINOR.PATCH`, por exemplo: `v0.1.0`.
 Alguns exemplos de significado:
 
 - `v0.1.0` – versão inicial funcional.

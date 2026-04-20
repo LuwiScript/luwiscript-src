@@ -1,14 +1,14 @@
 # LuwiScript
 
-**LuwiScript** é uma linguagem de programação estática e orientada a sistemas corporativos, projetada para rodar em qualquer sistema operacional moderno (Linux, macOS, Windows e FreeBSD).  
+**LuwiScript** é uma linguagem de programação estática e orientada a sistemas corporativos, projetada para rodar em qualquer sistema operacional moderno (Linux, macOS, Windows e FreeBSD).
 O compilador é escrito principalmente em Rust, com partes críticas em C/C++, enquanto a biblioteca padrão é escrita totalmente em LuwiScript.
 
 ---
 
 ## 📌 Objetivos
 
-- Proporcionar uma linguagem **clara, segura e eficiente** para sistemas de backend corporativos, APIs, automação e processos internos de empresas.  
-- Oferecer um compilador **portável e estável**, com geração de código nativo ou bytecode, integrado a um runtime multi‑plataforma.  
+- Proporcionar uma linguagem **clara, segura e eficiente** para sistemas de backend corporativos, APIs, automação e processos internos de empresas.
+- Oferecer um compilador **portável e estável**, com geração de código nativo ou bytecode, integrado a um runtime multi‑plataforma.
 - Manter uma **biblioteca padrão rica**, mas modular, focada em I/O, coleções, concorrência e integrações comuns (arquivos, rede, APIs, bancos de dados).
 
 ---
@@ -133,7 +133,7 @@ Este projeto está sob a licença **MIT** – veja o arquivo [`LICENSE`](LICENSE
 
 ## 🤝 Contribuição
 
-Contribuições são bem‑vindas!  
+Contribuições são bem‑vindas!
 Você pode:
 
 - Abrir issues com ideias de melhorias ou bugs.
