@@ -38,4 +38,5 @@ jobs:
 
       - name: Run cargo clippy
         run: |
+          cd compiler/src/
           cargo clippy --all-targets --all-features -- -D warnings
