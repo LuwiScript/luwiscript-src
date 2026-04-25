@@ -101,33 +101,33 @@ impl TypeChecker {
     fn check_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Let { pattern, ty, init } => {
-                if let Some(init_expr) = init {
-                    let init_ty = self.infer_expr(init_expr);
-                    if let Some(ann_ty) = ty {
-                        if !self.types_compatible(ann_ty, &init_ty) {
-                            self.diagnostics.emit(Diagnostic::error_at(
-                                format!("type mismatch: expected {}, found {}", ann_ty.name(), init_ty.name()),
-                                stmt.span,
-                            ));
-                        }
-                    }
-                    self.bind_pattern(pattern, &init_ty);
-                } else if let Some(ann_ty) = ty {
-                    self.bind_pattern(pattern, ann_ty);
+            if let Some(init_expr) = init {
+                let init_ty = self.infer_expr(init_expr);
+                if let Some(ann_ty) = ty
+                    && !self.types_compatible(ann_ty, &init_ty)
+                {
+                    self.diagnostics.emit(Diagnostic::error_at(
+                        format!("type mismatch: expected {}, found {}", ann_ty.name(), init_ty.name()),
+                        stmt.span,
+                    ));
                 }
+                self.bind_pattern(pattern, &init_ty);
+            } else if let Some(ann_ty) = ty {
+                self.bind_pattern(pattern, ann_ty);
             }
-            StmtKind::Const { ident, ty, init } => {
-                let init_ty = self.infer_expr(init);
-                if let Some(ann_ty) = ty {
-                    if !self.types_compatible(ann_ty, &init_ty) {
-                        self.diagnostics.emit(Diagnostic::error_at(
-                            format!("type mismatch in const: expected {}, found {}", ann_ty.name(), init_ty.name()),
-                            stmt.span,
-                        ));
-                    }
-                }
-                self.declare_var(ident, &init_ty);
             }
+        StmtKind::Const { ident, ty, init } => {
+            let init_ty = self.infer_expr(init);
+            if let Some(ann_ty) = ty
+                && !self.types_compatible(ann_ty, &init_ty)
+            {
+                self.diagnostics.emit(Diagnostic::error_at(
+                    format!("type mismatch in const: expected {}, found {}", ann_ty.name(), init_ty.name()),
+                    stmt.span,
+                ));
+            }
+            self.declare_var(ident, &init_ty);
+        }
             StmtKind::Func { name, params, ret_type, body } => {
                 self.functions.insert(name.clone(), (params.clone(), ret_type.clone()));
                 self.push_scope();
@@ -135,13 +135,13 @@ impl TypeChecker {
                     self.declare_var(&p.ident, &p.ty);
                 }
                 let body_ty = self.infer_expr(body);
-            if let Some(ret) = ret_type {
-                if !self.is_void(&body_ty) && !self.types_compatible(ret, &body_ty) && !self.is_void(ret) {
-                    self.diagnostics.emit(Diagnostic::warning_at(
-                        format!("function '{}' body type {} may not match declared return type {}", name, body_ty.name(), ret.name()),
-                        stmt.span,
-                    ));
-                }
+            if let Some(ret) = ret_type
+                && !self.is_void(&body_ty) && !self.types_compatible(ret, &body_ty) && !self.is_void(ret)
+            {
+                self.diagnostics.emit(Diagnostic::warning_at(
+                    format!("function '{}' body type {} may not match declared return type {}", name, body_ty.name(), ret.name()),
+                    stmt.span,
+                ));
             }
                 self.pop_scope();
             }
@@ -315,14 +315,14 @@ impl TypeChecker {
                         }
                         for (i, arg) in args.iter().enumerate() {
                             let arg_ty = self.infer_expr(arg);
-                            if let Some(p) = params.get(i) {
-                                if !self.types_compatible(&p.ty, &arg_ty) {
-                                    self.diagnostics.emit(Diagnostic::error_at(
-                                        format!("arg {} of '{}': expected {}, got {}", i + 1, name, p.ty.name(), arg_ty.name()),
-                                        *span,
-                                    ));
-                                }
-                            }
+                if let Some(p) = params.get(i)
+                    && !self.types_compatible(&p.ty, &arg_ty)
+                {
+                    self.diagnostics.emit(Diagnostic::error_at(
+                        format!("arg {} of '{}': expected {}, got {}", i + 1, name, p.ty.name(), arg_ty.name()),
+                        *span,
+                    ));
+                }
                         }
                         ret.unwrap_or(Type::Void(*span))
                     } else {

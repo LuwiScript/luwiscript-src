@@ -95,21 +95,16 @@ impl Lexer {
                         break;
                     }
                 }
-                Some('#') => {
-                    if self.peek_ahead(1) == Some('!') && self.pos == 0 {
-                        while let Some(c) = self.peek() {
-                            if c == '\n' { break; }
-                            self.advance();
-                        }
-                    } else if self.peek_ahead(1) == Some('[') {
-                        while let Some(c) = self.peek() {
-                            if c == '\n' { break; }
-                            self.advance();
-                        }
-                    } else {
-                        break;
+            Some('#') => {
+                if (self.peek_ahead(1) == Some('!') && self.pos == 0) || self.peek_ahead(1) == Some('[') {
+                    while let Some(c) = self.peek() {
+                        if c == '\n' { break; }
+                        self.advance();
                     }
+                } else {
+                    break;
                 }
+            }
                 _ => break,
             }
         }
@@ -142,7 +137,7 @@ impl Lexer {
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
                 lexeme.push(self.advance().unwrap());
-            } else if c == '.' && self.peek_ahead(1).map_or(false, |n| n.is_ascii_digit()) {
+            } else if c == '.' && self.peek_ahead(1).is_some_and(|n| n.is_ascii_digit()) {
                 is_float = true;
                 lexeme.push(self.advance().unwrap());
                 lexeme.push(self.advance().unwrap());

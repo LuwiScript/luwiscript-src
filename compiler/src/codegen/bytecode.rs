@@ -264,14 +264,14 @@ impl CodeGen {
                 self.end_scope(chunk);
             }
             StmtKind::Break | StmtKind::Continue => {}
-            StmtKind::Assign { target, value } => {
-                self.compile_expr(value, chunk);
-                if let Expr::Ident(name, _) = target {
-                    if let Some(idx) = self.resolve_local(name) {
-                        chunk.emit(Op::StoreLocal(idx));
-                    }
-                }
+        StmtKind::Assign { target, value } => {
+            self.compile_expr(value, chunk);
+            if let Expr::Ident(name, _) = target
+                && let Some(idx) = self.resolve_local(name)
+            {
+                chunk.emit(Op::StoreLocal(idx));
             }
+        }
             StmtKind::Struct { .. } | StmtKind::Enum { .. } | StmtKind::Impl { .. } | StmtKind::Import { .. } => {}
         }
     }
