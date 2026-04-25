@@ -1,0 +1,13 @@
+[package]
+name = "luwfmt"
+version = "0.1.0"
+edition = "2024"
+description = "LuwiScript code formatter"
+authors = ["Lucas Gabriel Witchemichen"]
+license = "MIT"
+
+[[bin]]
+name = "luwfmt"
+path = "src/main.rs"
+
+[dependencies]

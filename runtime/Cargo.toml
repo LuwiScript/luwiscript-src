@@ -1,0 +1,9 @@
+[package]
+name = "luwi-runtime"
+version = "0.1.0"
+edition = "2024"
+description = "LuwiScript runtime (VM, scheduler, stdlib)"
+authors = ["Lucas Gabriel Witchemichen"]
+license = "MIT"
+
+[dependencies]
