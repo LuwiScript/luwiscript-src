@@ -1,0 +1,20 @@
+[package]
+name = "luwi-script"
+version = "0.1.0"
+edition = "2024"
+authors = ["Lucas Gabriel Witchemichen"]
+description = "LuwiScript compiler"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+codespan-reporting = "0.12"
+
+[[bin]]
+name = "luwic"
+path = "src/main.rs"
+
+[lib]
+name = "luwi_script"
+path = "src/lib.rs"

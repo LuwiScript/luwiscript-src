@@ -1,0 +1,13 @@
+[package]
+name = "luwlinter"
+version = "0.1.0"
+edition = "2024"
+description = "LuwiScript linter"
+authors = ["Lucas Gabriel Witchemichen"]
+license = "MIT"
+
+[[bin]]
+name = "luwlinter"
+path = "src/main.rs"
+
+[dependencies]

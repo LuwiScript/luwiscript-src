@@ -1,0 +1,33 @@
+let x: int = 10;
+let y: int = 20;
+let sum: int = x + y;
+println("Soma:");
+println(sum);
+
+let active: bool = true;
+if active {
+    println("Ativo!");
+}
+
+let count: int = 0;
+while count < 5 {
+    println(count);
+    count = count + 1;
+}
+
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+let result: int = add(3, 4);
+println(result);
+
+for i in 0..5 {
+    println(i);
+}
+
+let nums: [int] = [1, 2, 3];
+println(len(nums));
+
+let s: string = "Ola";
+println(s);
