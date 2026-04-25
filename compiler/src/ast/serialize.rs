@@ -50,7 +50,7 @@ pub fn serialize_expr(expr: &Expr) -> String {
             for (pat, body) in arms {
                 out.push_str(&format!("{} => {}, ", serialize_pattern(pat), serialize_expr(body)));
             }
-            out.push_str("}");
+            out.push('}');
             out
         }
         Expr::Tuple { elems, .. } => {

@@ -840,13 +840,8 @@ impl Parser {
                         params.push(self.parse_type()?);
                     }
                 }
-                self.expect(TokenKind::RParen)?;
-                if self.peek_kind() == TokenKind::Arrow {
-                    if params.len() == 1 && tok.span.start == self.tokens.get(self.pos.saturating_sub(1)).unwrap().span.start {
-                        // single type in parens = grouped type, not tuple
-                    }
-                }
-                if self.match_kind(TokenKind::Arrow).is_some() {
+            self.expect(TokenKind::RParen)?;
+            if self.match_kind(TokenKind::Arrow).is_some() {
                     let ret = self.parse_type()?;
                     let last = self.tokens.get(self.pos.saturating_sub(1)).unwrap();
                     let span = tok.span.merge(last.span);
