@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::ast::serialize;
-use crate::codegen::bytecode::{Chunk, CodeGen, Op};
+use crate::codegen::bytecode::{Chunk, CodeGen, Constant, Op};
 use crate::diagnostics::report::report_diagnostics;
 use crate::lexer::lexer::Lexer;
 use crate::lexer::token::TokenKind;
@@ -220,11 +221,20 @@ fn serialize_op(op: &Op, bytes: &mut Vec<u8>) {
         Op::Dup => bytes.push(0x71),
         Op::IndexGet => bytes.push(0x80),
         Op::IndexSet => bytes.push(0x81),
-        Op::MemberGet(idx) => { bytes.push(0x82); bytes.extend_from_slice(&(*idx as u32).to_le_bytes()); }
-        Op::MakeArray(n) => { bytes.push(0x90); bytes.extend_from_slice(&(*n as u32).to_le_bytes()); }
-        Op::MakeTuple(n) => { bytes.push(0x91); bytes.extend_from_slice(&(*n as u32).to_le_bytes()); }
-            Op::MakeStruct { field_count } => { bytes.push(0x92); bytes.extend_from_slice(&(*field_count as u32).to_le_bytes()); }
-            Op::MakeRange => { bytes.push(0x93); }
+    Op::MemberGet(idx) => { bytes.push(0x82); bytes.extend_from_slice(&(*idx as u32).to_le_bytes()); }
+    Op::MemberSet(idx) => { bytes.push(0x83); bytes.extend_from_slice(&(*idx as u32).to_le_bytes()); }
+    Op::MakeArray(n) => { bytes.push(0x90); bytes.extend_from_slice(&(*n as u32).to_le_bytes()); }
+    Op::MakeTuple(n) => { bytes.push(0x91); bytes.extend_from_slice(&(*n as u32).to_le_bytes()); }
+    Op::MakeStruct { name_idx, field_count, field_name_indices } => {
+        bytes.push(0x92);
+        bytes.extend_from_slice(&(*name_idx as u32).to_le_bytes());
+        bytes.extend_from_slice(&(*field_count as u32).to_le_bytes());
+        bytes.extend_from_slice(&(field_name_indices.len() as u32).to_le_bytes());
+        for fi in field_name_indices {
+            bytes.extend_from_slice(&(*fi as u32).to_le_bytes());
+        }
+    }
+    Op::MakeRange => { bytes.push(0x93); }
     }
 }
 
@@ -263,6 +273,10 @@ enum Value {
     String(String),
     Array(Vec<Value>),
     Tuple(Vec<Value>),
+    Struct {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -281,16 +295,26 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
-            Value::Tuple(elems) => {
-                write!(f, "(")?;
-                for (i, e) in elems.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{e}")?;
-                }
-                write!(f, ")")
+        Value::Tuple(elems) => {
+            write!(f, "(")?;
+            for (i, e) in elems.iter().enumerate() {
+                if i > 0 { write!(f, ", ")?; }
+                write!(f, "{e}")?;
             }
+            write!(f, ")")
+        }
+        Value::Struct { name, fields } => {
+            write!(f, "{name} {{ ")?;
+            let mut first = true;
+            for (k, v) in fields {
+                if !first { write!(f, ", ")?; }
+                first = false;
+                write!(f, "{k}: {v}")?;
+            }
+            write!(f, " }}")
         }
     }
+}
 }
 
 impl<'a> Vm<'a> {
@@ -457,8 +481,99 @@ impl<'a> Vm<'a> {
                         _ => return Err("invalid index operation".into()),
                     }
                 }
-                Op::IndexSet => {}
-                Op::MemberGet(_) => {}
+                Op::IndexSet => {
+                let val = self.stack.pop().ok_or("stack underflow")?;
+                let idx = self.stack.pop().ok_or("stack underflow")?;
+                let mut target = self.stack.pop().ok_or("stack underflow")?;
+                match (&mut target, &idx) {
+                    (Value::Array(elems), Value::Int(i)) => {
+                        let i = *i as usize;
+                        if i < elems.len() {
+                            elems[i] = val;
+                            self.stack.push(target);
+                        } else {
+                            return Err(format!("index {i} out of bounds for array assignment"));
+                        }
+                    }
+                    _ => return Err("invalid index set operation".into()),
+                }
+            }
+                Op::MemberGet(idx) => {
+                let target = self.stack.pop().ok_or("stack underflow")?;
+                match &target {
+                    Value::Struct { fields, .. } => {
+                        if let Some(key) = self.chunks[self.chunk_idx].constants.get(idx) {
+                            if let Constant::String(field_name) = key {
+                                if let Some(val) = fields.get(field_name) {
+                                    self.stack.push(val.clone());
+                                } else {
+                                    return Err(format!("struct has no field '{field_name}'"));
+                                }
+                            } else {
+                                return Err("MemberGet constant is not a string".into());
+                            }
+                        } else {
+                            return Err(format!("MemberGet constant index {idx} out of bounds"));
+                        }
+                    }
+                    Value::String(s) => {
+                        if let Some(key) = self.chunks[self.chunk_idx].constants.get(idx) {
+                            if let Constant::String(method_name) = key {
+                                match method_name.as_str() {
+                                    "len" => {
+                                        self.stack.push(Value::Int(s.len() as i64));
+                                    }
+                                    _ => return Err(format!("string has no method '{method_name}'")),
+                                }
+                            } else {
+                                return Err("MemberGet constant is not a string".into());
+                            }
+                        } else {
+                            return Err(format!("MemberGet constant index {idx} out of bounds"));
+                        }
+                    }
+                    Value::Array(arr) => {
+                        if let Some(key) = self.chunks[self.chunk_idx].constants.get(idx) {
+                            if let Constant::String(method_name) = key {
+                                match method_name.as_str() {
+                                    "len" => {
+                                        self.stack.push(Value::Int(arr.len() as i64));
+                                    }
+                                    _ => return Err(format!("array has no method '{method_name}'")),
+                                }
+                            } else {
+                                return Err("MemberGet constant is not a string".into());
+                            }
+                        } else {
+                            return Err(format!("MemberGet constant index {idx} out of bounds"));
+                        }
+                    }
+            _ => return Err(format!("cannot access field on {}", target)),
+            }
+            }
+            Op::MemberSet(idx) => {
+                let val = self.stack.pop().ok_or("stack underflow")?;
+                let mut target = self.stack.pop().ok_or("stack underflow")?;
+                match target {
+                    Value::Struct { ref name, ref mut fields } => {
+                        if let Some(key) = self.chunks[self.chunk_idx].constants.get(idx) {
+                            if let Constant::String(field_name) = key {
+                                if fields.contains_key(field_name) {
+                                    fields.insert(field_name.clone(), val);
+                                    self.stack.push(target);
+                                } else {
+                                    return Err(format!("struct '{name}' has no field '{field_name}'"));
+                                }
+                            } else {
+                                return Err("MemberSet constant is not a string".into());
+                            }
+                        } else {
+                            return Err(format!("MemberSet constant index {idx} out of bounds"));
+                        }
+                    }
+                    _ => return Err(format!("cannot set field on {}", target)),
+                }
+            }
                 Op::MakeArray(n) => {
                     let start = self.stack.len().saturating_sub(n);
                     let elems: Vec<Value> = self.stack.drain(start..).collect();
@@ -469,7 +584,31 @@ impl<'a> Vm<'a> {
                     let elems: Vec<Value> = self.stack.drain(start..).collect();
                     self.stack.push(Value::Tuple(elems));
                 }
-                Op::MakeStruct { .. } => {}
+                Op::MakeStruct { name_idx, field_count, field_name_indices } => {
+                let struct_name = if let Some(c) = self.chunks[self.chunk_idx].constants.get(name_idx) {
+                    if let Constant::String(s) = c { s.clone() } else { return Err("MakeStruct name constant is not a string".into()); }
+                } else {
+                    return Err(format!("MakeStruct name constant index {name_idx} out of bounds"));
+                };
+                let mut field_names = Vec::with_capacity(field_count);
+                for &fi in &field_name_indices {
+                    if let Some(c) = self.chunks[self.chunk_idx].constants.get(fi) {
+                        if let Constant::String(s) = c { field_names.push(s.clone()); }
+                        else { return Err("MakeStruct field constant is not a string".into()); }
+                    } else {
+                        return Err(format!("MakeStruct field constant index {fi} out of bounds"));
+                    }
+                }
+                let start = self.stack.len().saturating_sub(field_count);
+                let vals: Vec<Value> = self.stack.drain(start..).collect();
+                let mut fields = HashMap::new();
+                for (i, val) in vals.into_iter().enumerate() {
+                    if i < field_names.len() {
+                        fields.insert(field_names[i].clone(), val);
+                    }
+                }
+                self.stack.push(Value::Struct { name: struct_name, fields });
+            }
             Op::MakeRange => {
                 let end = self.stack.pop().ok_or("stack underflow")?;
                 let start = self.stack.pop().ok_or("stack underflow")?;
@@ -544,6 +683,7 @@ impl Value {
             Value::String(s) => !s.is_empty(),
             Value::Array(a) => !a.is_empty(),
             Value::Tuple(t) => !t.is_empty(),
+            Value::Struct { .. } => true,
         }
     }
 }

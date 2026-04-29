@@ -451,12 +451,43 @@ impl TypeChecker {
                 let elem_ty = elems.first().map(|e| self.infer_expr(e)).unwrap_or(Type::Void(*span));
                 Type::Array { elem: Box::new(elem_ty), span: *span }
             }
-            Expr::StructInit { name, fields, span } => {
+        Expr::StructInit { name, fields, span } => {
+            if let Some(field_map) = self.structs.get(name).cloned() {
+                for (f_name, val) in fields {
+                    let val_ty = self.infer_expr(val);
+                    if let Some(expected_ty) = field_map.get(f_name) {
+                        if !self.types_compatible(expected_ty, &val_ty) {
+                            self.diagnostics.emit(Diagnostic::error_at(
+                                format!("struct '{name}' field '{f_name}': expected {}, found {}", expected_ty.name(), val_ty.name()),
+                                *span,
+                            ));
+                        }
+                    } else {
+                        self.diagnostics.emit(Diagnostic::error_at(
+                            format!("struct '{name}' has no field '{f_name}'"),
+                            *span,
+                        ));
+                    }
+                }
+                let defined_fields: std::collections::HashSet<&String> = field_map.keys().collect();
+                let init_fields: std::collections::HashSet<&String> = fields.iter().map(|(n, _)| n).collect();
+                for missing in defined_fields.difference(&init_fields) {
+                    self.diagnostics.emit(Diagnostic::warning_at(
+                        format!("struct '{name}' field '{missing}' not initialized"),
+                        *span,
+                    ));
+                }
+            } else {
+                self.diagnostics.emit(Diagnostic::error_at(
+                    format!("undefined struct '{name}'"),
+                    *span,
+                ));
                 for (_, val) in fields {
                     self.infer_expr(val);
                 }
-                Type::Named { name: name.clone(), span: *span }
             }
+            Type::Named { name: name.clone(), span: *span }
+        }
             Expr::Range { start, end, span } => {
                 self.infer_expr(start);
                 self.infer_expr(end);
