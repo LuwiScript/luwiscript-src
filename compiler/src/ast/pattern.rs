@@ -4,6 +4,7 @@ use crate::ast::span::Span;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Ident(String, Span),
+    MutIdent(String, Span),
     Wildcard(Span),
     Literal(Literal, Span),
     Tuple(Vec<Pattern>, Span),

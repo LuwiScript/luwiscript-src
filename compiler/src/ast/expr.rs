@@ -23,6 +23,11 @@ pub enum Expr {
         span: Span,
     },
 
+    Await {
+        expr: Box<Expr>,
+        span: Span,
+    },
+
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,

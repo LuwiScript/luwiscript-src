@@ -180,7 +180,7 @@ impl CodeGen {
             } else {
                 chunk.emit(Op::PushNull);
             }
-            if let crate::ast::pattern::Pattern::Ident(name, _) = pattern {
+            if let crate::ast::pattern::Pattern::Ident(name, _) | crate::ast::pattern::Pattern::MutIdent(name, _) = pattern {
                 let idx = self.locals.len();
                 self.declare_local(name);
                 chunk.emit(Op::StoreLocal(idx));
@@ -390,6 +390,9 @@ impl CodeGen {
                     UnaryOp::Not => { chunk.emit(Op::Not); }
                     UnaryOp::Ref | UnaryOp::Deref => { chunk.emit(Op::PushNull); }
                 }
+            }
+            Expr::Await { expr, .. } => {
+                self.compile_expr(expr, chunk);
             }
             Expr::Call { callee, args, .. } => {
                 if let Expr::Ident(name, _) = callee.as_ref() {

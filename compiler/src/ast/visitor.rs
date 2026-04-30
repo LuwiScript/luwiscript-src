@@ -33,6 +33,9 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
         Expr::Unary { expr, .. } => {
             v.visit_expr(expr);
         }
+        Expr::Await { expr, .. } => {
+            v.visit_expr(expr);
+        }
         Expr::Call { callee, args, .. } => {
             v.visit_expr(callee);
             for arg in args {
