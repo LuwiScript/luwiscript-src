@@ -2,93 +2,12 @@ use crate::ast::expr::{BinaryOp, Expr, UnaryOp};
 use crate::ast::literal::Literal;
 use crate::ast::stmt::{Stmt, StmtKind};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Op {
-    PushNull,
-    PushInt(i64),
-    PushFloat(f64),
-    PushBool(bool),
-    PushString(String),
-    LoadLocal(usize),
-    StoreLocal(usize),
-    LoadGlobal(usize),
-    StoreGlobal(usize),
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Eq,
-    Neq,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    And,
-    Or,
-    Neg,
-    Not,
-    Jump(usize),
-    JumpIfFalse(usize),
-    JumpIfTrue(usize),
-    Call { chunk_idx: usize, argc: usize },
-    Return,
-    Print,
-    Println,
-    Len,
-    Halt,
-    Pop,
-    Dup,
-    IndexGet,
-    IndexSet,
-    MemberGet(usize),
-    MemberSet(usize),
-    MakeArray(usize),
-    MakeTuple(usize),
-    MakeStruct {
-        name_idx: usize,
-        field_count: usize,
-        field_name_indices: Vec<usize>,
-    },
-    MakeRange,
-}
+// Re-export the canonical bytecode types from the runtime crate.
+pub use luwi_runtime::{Chunk, Constant, Op};
 
-#[derive(Debug, Clone)]
-pub struct Chunk {
-    pub ops: Vec<Op>,
-    pub constants: Vec<Constant>,
-    pub name: String,
-}
-
-#[derive(Debug, Clone)]
-pub enum Constant {
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    String(String),
-    Null,
-}
-
-impl Chunk {
-    pub fn new(name: impl Into<String>) -> Self {
-        Chunk { ops: Vec::new(), constants: Vec::new(), name: name.into() }
-    }
-
-    pub fn emit(&mut self, op: Op) -> usize {
-        let idx = self.ops.len();
-        self.ops.push(op);
-        idx
-    }
-
-    pub fn patch(&mut self, idx: usize, op: Op) {
-        self.ops[idx] = op;
-    }
-
-    pub fn add_constant(&mut self, c: Constant) -> usize {
-        let idx = self.constants.len();
-        self.constants.push(c);
-        idx
-    }
+struct StructDef {
+    name: String,
+    fields: Vec<String>,
 }
 
 pub struct CodeGen {
@@ -98,11 +17,6 @@ pub struct CodeGen {
     current_depth: usize,
     func_names: Vec<String>,
     struct_defs: Vec<StructDef>,
-}
-
-struct StructDef {
-    name: String,
-    fields: Vec<String>,
 }
 
 impl CodeGen {
@@ -127,9 +41,7 @@ impl CodeGen {
         std::mem::take(&mut self.chunks)
     }
 
-    fn begin_scope(&mut self) {
-        self.current_depth += 1;
-    }
+    fn begin_scope(&mut self) { self.current_depth += 1; }
 
     fn end_scope(&mut self, _chunk: &mut Chunk) {
         self.current_depth -= 1;
@@ -143,26 +55,21 @@ impl CodeGen {
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
         for (i, local) in self.locals.iter().enumerate().rev() {
-            if local == name {
-                return Some(i);
-            }
+            if local == name { return Some(i); }
         }
         None
     }
 
     fn find_struct(&self, name: &str) -> Option<usize> {
         for (i, s) in self.struct_defs.iter().enumerate() {
-            if s.name == name {
-                return Some(i);
-            }
+            if s.name == name { return Some(i); }
         }
         None
     }
 
     fn add_string_constant(chunk: &mut Chunk, s: &str) -> usize {
         for (i, c) in chunk.constants.iter().enumerate() {
-            if let Constant::String(cs) = c
-                && cs == s { return i; }
+            if let Constant::String(cs) = c && cs == s { return i; }
         }
         chunk.add_constant(Constant::String(s.to_string()))
     }
@@ -174,49 +81,49 @@ impl CodeGen {
 
     fn compile_stmt(&mut self, stmt: &Stmt, chunk: &mut Chunk) {
         match &stmt.kind {
-        StmtKind::Let { pattern, init, .. } => {
-            if let Some(init_expr) = init {
-                self.compile_expr(init_expr, chunk);
-            } else {
-                chunk.emit(Op::PushNull);
+            StmtKind::Let { pattern, init, .. } => {
+                if let Some(init_expr) = init {
+                    self.compile_expr(init_expr, chunk);
+                } else {
+                    chunk.emit(Op::PushNull);
+                }
+                if let crate::ast::pattern::Pattern::Ident(name, _) = pattern {
+                    let idx = self.locals.len();
+                    self.declare_local(name);
+                    chunk.emit(Op::StoreLocal(idx));
+                } else {
+                    chunk.emit(Op::Pop);
+                }
             }
-            if let crate::ast::pattern::Pattern::Ident(name, _) = pattern {
+            StmtKind::Const { ident, init, .. } => {
+                self.compile_expr(init, chunk);
+                let idx = self.locals.len();
+                self.declare_local(ident);
+                chunk.emit(Op::StoreLocal(idx));
+            }
+            StmtKind::Func { name, params, body, .. } => {
+                let func_chunk = Chunk::new(name.clone());
+                let prev_locals = std::mem::take(&mut self.locals);
+                let prev_depth = std::mem::take(&mut self.local_depth);
+                let prev_curr = self.current_depth;
+                self.current_depth = 0;
+                for p in params {
+                    self.declare_local(&p.ident);
+                }
+                let mut fc = func_chunk;
+                self.compile_expr(body, &mut fc);
+                fc.emit(Op::Return);
+                let _func_idx = self.chunks.len() + 1;
+                self.chunks.push(fc);
+                self.func_names.push(name.clone());
+                self.locals = prev_locals;
+                self.local_depth = prev_depth;
+                self.current_depth = prev_curr;
+                chunk.emit(Op::PushNull);
                 let idx = self.locals.len();
                 self.declare_local(name);
                 chunk.emit(Op::StoreLocal(idx));
-            } else {
-                chunk.emit(Op::Pop);
             }
-        }
-        StmtKind::Const { ident, init, .. } => {
-            self.compile_expr(init, chunk);
-            let idx = self.locals.len();
-            self.declare_local(ident);
-            chunk.emit(Op::StoreLocal(idx));
-        }
-        StmtKind::Func { name, params, body, .. } => {
-            let func_chunk = Chunk::new(name.clone());
-            let prev_locals = std::mem::take(&mut self.locals);
-            let prev_depth = std::mem::take(&mut self.local_depth);
-            let prev_curr = self.current_depth;
-            self.current_depth = 0;
-            for p in params {
-                self.declare_local(&p.ident);
-            }
-            let mut fc = func_chunk;
-            self.compile_expr(body, &mut fc);
-            fc.emit(Op::Return);
-            let _func_idx = self.chunks.len() + 1;
-            self.chunks.push(fc);
-            self.func_names.push(name.clone());
-            self.locals = prev_locals;
-            self.local_depth = prev_depth;
-            self.current_depth = prev_curr;
-            chunk.emit(Op::PushNull);
-            let idx = self.locals.len();
-            self.declare_local(name);
-            chunk.emit(Op::StoreLocal(idx));
-        }
             StmtKind::Expr(e) => {
                 self.compile_expr(e, chunk);
             }
@@ -293,54 +200,56 @@ impl CodeGen {
                 self.end_scope(chunk);
             }
             StmtKind::Break | StmtKind::Continue => {}
-        StmtKind::Assign { target, value } => {
-            if let Expr::Ident(name, _) = target
-            && let Some(idx) = self.resolve_local(name)
-            {
-                self.compile_expr(value, chunk);
-                chunk.emit(Op::StoreLocal(idx));
-            } else if let Expr::Member { target: obj, field, .. } = target {
-                if let Expr::Ident(obj_name, _) = &**obj
-                && let Some(obj_idx) = self.resolve_local(obj_name) {
-                    chunk.emit(Op::LoadLocal(obj_idx));
+            StmtKind::Assign { target, value } => {
+                if let Expr::Ident(name, _) = target
+                    && let Some(idx) = self.resolve_local(name)
+                {
                     self.compile_expr(value, chunk);
-                    let idx = Self::add_string_constant(chunk, field);
-                    chunk.emit(Op::MemberSet(idx));
-                    chunk.emit(Op::StoreLocal(obj_idx));
-                    chunk.emit(Op::Pop);
+                    chunk.emit(Op::StoreLocal(idx));
+                } else if let Expr::Member { target: obj, field, .. } = target {
+                    if let Expr::Ident(obj_name, _) = &**obj
+                        && let Some(obj_idx) = self.resolve_local(obj_name)
+                    {
+                        chunk.emit(Op::LoadLocal(obj_idx));
+                        self.compile_expr(value, chunk);
+                        let idx = Self::add_string_constant(chunk, field);
+                        chunk.emit(Op::MemberSet(idx));
+                        chunk.emit(Op::StoreLocal(obj_idx));
+                        chunk.emit(Op::Pop);
+                    } else {
+                        self.compile_expr(obj, chunk);
+                        self.compile_expr(value, chunk);
+                        let idx = Self::add_string_constant(chunk, field);
+                        chunk.emit(Op::MemberSet(idx));
+                        chunk.emit(Op::Pop);
+                    }
+                } else if let Expr::Index { target: arr, index, .. } = target {
+                    if let Expr::Ident(arr_name, _) = &**arr
+                        && let Some(arr_idx) = self.resolve_local(arr_name)
+                    {
+                        chunk.emit(Op::LoadLocal(arr_idx));
+                        self.compile_expr(index, chunk);
+                        self.compile_expr(value, chunk);
+                        chunk.emit(Op::IndexSet);
+                        chunk.emit(Op::StoreLocal(arr_idx));
+                        chunk.emit(Op::Pop);
+                    } else {
+                        self.compile_expr(arr, chunk);
+                        self.compile_expr(index, chunk);
+                        self.compile_expr(value, chunk);
+                        chunk.emit(Op::IndexSet);
+                        chunk.emit(Op::Pop);
+                    }
                 } else {
-                    self.compile_expr(obj, chunk);
                     self.compile_expr(value, chunk);
-                    let idx = Self::add_string_constant(chunk, field);
-                    chunk.emit(Op::MemberSet(idx));
                     chunk.emit(Op::Pop);
                 }
-            } else if let Expr::Index { target: arr, index, .. } = target {
-                if let Expr::Ident(arr_name, _) = &**arr
-                && let Some(arr_idx) = self.resolve_local(arr_name) {
-                    chunk.emit(Op::LoadLocal(arr_idx));
-                    self.compile_expr(index, chunk);
-                    self.compile_expr(value, chunk);
-                    chunk.emit(Op::IndexSet);
-                    chunk.emit(Op::StoreLocal(arr_idx));
-                    chunk.emit(Op::Pop);
-                } else {
-                    self.compile_expr(arr, chunk);
-                    self.compile_expr(index, chunk);
-                    self.compile_expr(value, chunk);
-                    chunk.emit(Op::IndexSet);
-                    chunk.emit(Op::Pop);
-                }
-            } else {
-                self.compile_expr(value, chunk);
-                chunk.emit(Op::Pop);
             }
-        }
             StmtKind::Struct { name, fields } => {
-            let field_names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
-            self.struct_defs.push(StructDef { name: name.clone(), fields: field_names });
-        }
-        StmtKind::Enum { .. } | StmtKind::Impl { .. } | StmtKind::Import { .. } => {}
+                let field_names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
+                self.struct_defs.push(StructDef { name: name.clone(), fields: field_names });
+            }
+            StmtKind::Enum { .. } | StmtKind::Impl { .. } | StmtKind::Import { .. } => {}
         }
     }
 
@@ -415,16 +324,16 @@ impl CodeGen {
                             chunk.emit(Op::Len);
                             return;
                         }
-            _ => {}
-            }
-            let func_idx = self.func_names.iter().position(|n| n == name)
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            for a in args {
-                self.compile_expr(a, chunk);
-            }
-            chunk.emit(Op::Call { chunk_idx: func_idx, argc: args.len() });
-        } else {
+                        _ => {}
+                    }
+                    let func_idx = self.func_names.iter().position(|n| n == name)
+                        .map(|i| i + 1)
+                        .unwrap_or(0);
+                    for a in args {
+                        self.compile_expr(a, chunk);
+                    }
+                    chunk.emit(Op::Call { chunk_idx: func_idx, argc: args.len() });
+                } else {
                     self.compile_expr(callee, chunk);
                     for a in args {
                         self.compile_expr(a, chunk);
@@ -467,11 +376,11 @@ impl CodeGen {
                 self.compile_expr(index, chunk);
                 chunk.emit(Op::IndexGet);
             }
-        Expr::Member { target, field, .. } => {
-            self.compile_expr(target, chunk);
-            let idx = Self::add_string_constant(chunk, field);
-            chunk.emit(Op::MemberGet(idx));
-        }
+            Expr::Member { target, field, .. } => {
+                self.compile_expr(target, chunk);
+                let idx = Self::add_string_constant(chunk, field);
+                chunk.emit(Op::MemberGet(idx));
+            }
             Expr::Match { scrutinee, arms, .. } => {
                 self.compile_expr(scrutinee, chunk);
                 if let Some((_, body)) = arms.first() {
@@ -492,16 +401,16 @@ impl CodeGen {
                 }
                 chunk.emit(Op::MakeArray(elems.len()));
             }
-        Expr::StructInit { name, fields, .. } => {
-            let name_idx = Self::add_string_constant(chunk, name);
-            let mut field_name_indices = Vec::with_capacity(fields.len());
-            for (field_name, val) in fields {
-                let fi = Self::add_string_constant(chunk, field_name);
-                field_name_indices.push(fi);
-                self.compile_expr(val, chunk);
+            Expr::StructInit { name, fields, .. } => {
+                let name_idx = Self::add_string_constant(chunk, name);
+                let mut field_name_indices = Vec::with_capacity(fields.len());
+                for (field_name, val) in fields {
+                    let fi = Self::add_string_constant(chunk, field_name);
+                    field_name_indices.push(fi);
+                    self.compile_expr(val, chunk);
+                }
+                chunk.emit(Op::MakeStruct { name_idx, field_count: fields.len(), field_name_indices });
             }
-            chunk.emit(Op::MakeStruct { name_idx, field_count: fields.len(), field_name_indices });
-        }
             Expr::Range { start, end, .. } => {
                 self.compile_expr(start, chunk);
                 self.compile_expr(end, chunk);

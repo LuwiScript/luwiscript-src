@@ -1,0 +1,25 @@
+struct Pessoa {
+    nome: string,
+    idade: int,
+    ativo: bool,
+}
+
+let p: Pessoa = Pessoa { nome: "Ana", idade: 30, ativo: true };
+
+println(p.nome);
+println(p.idade);
+println(p.ativo);
+
+p.idade = 31;
+println(p.idade);
+
+struct Ponto {
+    x: float,
+    y: float,
+}
+
+let a: Ponto = Ponto { x: 1.0, y: 2.0 };
+let b: Ponto = Ponto { x: 3.0, y: 4.0 };
+
+println(a.x);
+println(b.y);
