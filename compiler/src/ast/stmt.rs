@@ -27,6 +27,7 @@ pub enum StmtKind {
         params: Vec<Param>,
         ret_type: Option<Type>,
         body: Expr,
+        is_async: bool,
     },
     Return {
         value: Option<Expr>,
