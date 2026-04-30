@@ -90,7 +90,7 @@ impl Parser {
             | TokenKind::Ident | TokenKind::LParen | TokenKind::LBrace
             | TokenKind::LBracket
             | TokenKind::Minus | TokenKind::Not | TokenKind::Amp | TokenKind::Star
-            | TokenKind::Spawn | TokenKind::Pipe
+            | TokenKind::Spawn | TokenKind::Await | TokenKind::Pipe
         )
     }
 
@@ -98,7 +98,8 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Let => self.parse_let(),
             TokenKind::Const => self.parse_const(),
-            TokenKind::Fn => self.parse_fn(),
+            TokenKind::Fn => self.parse_fn(false),
+            TokenKind::Async => self.parse_async_fn(),
             TokenKind::Struct => self.parse_struct(),
             TokenKind::Enum => self.parse_enum(),
             TokenKind::Impl => self.parse_impl(),
@@ -172,7 +173,12 @@ impl Parser {
         })
     }
 
-    fn parse_fn(&mut self) -> ParseResult<Stmt> {
+    fn parse_async_fn(&mut self) -> ParseResult<Stmt> {
+        self.expect(TokenKind::Async)?;
+        self.parse_fn(true)
+    }
+
+    fn parse_fn(&mut self, is_async: bool) -> ParseResult<Stmt> {
         let start = self.pos;
         self.expect(TokenKind::Fn)?;
         let name_tok = self.expect(TokenKind::Ident)?;
@@ -191,6 +197,7 @@ impl Parser {
                 params,
                 ret_type,
                 body,
+                is_async,
             },
             span,
         })
@@ -280,7 +287,7 @@ impl Parser {
         self.expect(TokenKind::LBrace)?;
         let mut methods = Vec::new();
         while self.peek_kind() != TokenKind::RBrace {
-            methods.push(self.parse_fn()?);
+            methods.push(self.parse_fn(false)?);
         }
         self.expect(TokenKind::RBrace)?;
         let span = self.span_since(start);
@@ -617,6 +624,12 @@ impl Parser {
                 let inner = self.parse_call()?;
                 Ok(inner)
             }
+            TokenKind::Await => {
+                let tok = self.advance();
+                let inner = self.parse_call()?;
+                let span = tok.span.merge(inner.span());
+                Ok(Expr::Await { expr: Box::new(inner), span })
+            }
             _ => Err(ParseError {
                 message: format!("unexpected token '{}'", tok.lexeme),
                 span: tok.span,
@@ -738,6 +751,12 @@ impl Parser {
                 } else {
                     Ok(Pattern::Ident(tok.lexeme, tok.span))
                 }
+            }
+            TokenKind::Mut => {
+                let mut_tok = self.advance();
+                let ident = self.expect(TokenKind::Ident)?;
+                let span = mut_tok.span.merge(ident.span);
+                Ok(Pattern::MutIdent(ident.lexeme, span))
             }
             TokenKind::Underscore => {
                 let tok = self.advance();
@@ -877,6 +896,7 @@ impl Expr {
             Expr::Ident(_, s) => *s,
             Expr::Binary { span, .. } => *span,
             Expr::Unary { span, .. } => *span,
+            Expr::Await { span, .. } => *span,
             Expr::Call { span, .. } => *span,
             Expr::Block { span, .. } => *span,
             Expr::If { span, .. } => *span,

@@ -12,6 +12,7 @@ pub fn serialize_expr(expr: &Expr) -> String {
         Expr::Unary { op, expr, .. } => {
             format!("({}{})", serialize_unaryop(op), serialize_expr(expr))
         }
+        Expr::Await { expr, .. } => format!("await {}", serialize_expr(expr)),
         Expr::Call { callee, args, .. } => {
             let a = args.iter().map(serialize_expr).collect::<Vec<_>>().join(", ");
             format!("{}({})", serialize_expr(callee), a)
@@ -93,9 +94,9 @@ pub fn serialize_stmt(stmt: &Stmt) -> String {
             out.push_str(&format!(" = {}", serialize_expr(init)));
             out
         }
-        StmtKind::Func { name, params, ret_type, body } => {
+        StmtKind::Func { name, params, ret_type, body, is_async } => {
             let p = params.iter().map(|Param { ident, ty, .. }| format!("{}: {}", ident, ty.name())).collect::<Vec<_>>().join(", ");
-            let mut out = format!("fn {name}({p})");
+            let mut out = if *is_async { format!("async fn {name}({p})") } else { format!("fn {name}({p})") };
             if let Some(r) = ret_type {
                 out.push_str(&format!(" -> {}", r.name()));
             }
@@ -198,6 +199,7 @@ use crate::ast::pattern::Pattern;
 fn serialize_pattern(pat: &Pattern) -> String {
     match pat {
         Pattern::Ident(name, _) => name.clone(),
+        Pattern::MutIdent(name, _) => format!("mut {name}"),
         Pattern::Wildcard(_) => "_".into(),
         Pattern::Literal(lit, _) => serialize_literal(lit),
         Pattern::Tuple(pats, _) => {

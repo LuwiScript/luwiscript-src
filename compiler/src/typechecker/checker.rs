@@ -10,19 +10,25 @@ use crate::diagnostics::error::{Diagnostic, Diagnostics};
 #[derive(Debug, Clone)]
 struct Scope {
     vars: HashMap<String, Type>,
+    mutable_vars: HashMap<String, bool>,
 }
 
 impl Scope {
     fn new() -> Self {
-        Scope { vars: HashMap::new() }
+        Scope { vars: HashMap::new(), mutable_vars: HashMap::new() }
     }
 
-    fn insert(&mut self, name: String, ty: Type) {
+    fn insert(&mut self, name: String, ty: Type, mutable: bool) {
+        self.mutable_vars.insert(name.clone(), mutable);
         self.vars.insert(name, ty);
     }
 
     fn get(&self, name: &str) -> Option<&Type> {
         self.vars.get(name)
+    }
+
+    fn is_mutable(&self, name: &str) -> bool {
+        self.mutable_vars.get(name).copied().unwrap_or(false)
     }
 }
 
@@ -83,9 +89,9 @@ impl TypeChecker {
         }
     }
 
-    fn declare_var(&mut self, name: &str, ty: &Type) {
+    fn declare_var(&mut self, name: &str, ty: &Type, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), ty.clone());
+            scope.insert(name.to_string(), ty.clone(), mutable);
         }
     }
 
@@ -96,6 +102,15 @@ impl TypeChecker {
             }
         }
         None
+    }
+
+    fn lookup_var_mutable(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if scope.get(name).is_some() {
+                return scope.is_mutable(name);
+            }
+        }
+        false
     }
 
     fn check_stmt(&mut self, stmt: &Stmt) {
@@ -126,13 +141,13 @@ impl TypeChecker {
                     stmt.span,
                 ));
             }
-            self.declare_var(ident, &init_ty);
+            self.declare_var(ident, &init_ty, false);
         }
-            StmtKind::Func { name, params, ret_type, body } => {
+            StmtKind::Func { name, params, ret_type, body, .. } => {
                 self.functions.insert(name.clone(), (params.clone(), ret_type.clone()));
                 self.push_scope();
                 for p in params {
-                    self.declare_var(&p.ident, &p.ty);
+                    self.declare_var(&p.ident, &p.ty, false);
                 }
                 let body_ty = self.infer_expr(body);
             if let Some(ret) = ret_type
@@ -195,12 +210,20 @@ impl TypeChecker {
                     _ => Type::Any(stmt.span),
                 };
                 self.push_scope();
-                self.declare_var(ident, &elem_ty);
+                self.declare_var(ident, &elem_ty, false);
                 self.infer_expr(body);
                 self.pop_scope();
             }
             StmtKind::Break | StmtKind::Continue => {}
             StmtKind::Assign { target, value } => {
+                if let Expr::Ident(name, span) = target
+                    && !self.lookup_var_mutable(name)
+                {
+                    self.diagnostics.emit(Diagnostic::error_at(
+                        format!("cannot assign to immutable variable '{name}', declare with 'mut'"),
+                        *span,
+                    ));
+                }
                 let target_ty = self.infer_expr(target);
                 let value_ty = self.infer_expr(value);
                 if !self.types_compatible(&target_ty, &value_ty) {
@@ -304,6 +327,7 @@ impl TypeChecker {
                     UnaryOp::Deref => inner,
                 }
             }
+            Expr::Await { expr, .. } => self.infer_expr(expr),
             Expr::Call { callee, args, span } => {
                 if let Expr::Ident(name, _) = callee.as_ref() {
                     if let Some((params, ret)) = self.functions.get(name).cloned() {
@@ -376,7 +400,7 @@ impl TypeChecker {
             Expr::Lambda { params, ret_type, body, span } => {
                 self.push_scope();
                 for p in params {
-                    self.declare_var(&p.ident, &p.ty);
+                    self.declare_var(&p.ident, &p.ty, false);
                 }
                 let body_ty = self.infer_expr(body);
                 self.pop_scope();
@@ -501,7 +525,10 @@ impl TypeChecker {
         use crate::ast::pattern::Pattern;
         match pat {
             Pattern::Ident(name, _) => {
-                self.declare_var(name, ty);
+                self.declare_var(name, ty, false);
+            }
+            Pattern::MutIdent(name, _) => {
+                self.declare_var(name, ty, true);
             }
             Pattern::Wildcard(_) => {}
             Pattern::Tuple(pats, _) => {

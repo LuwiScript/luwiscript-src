@@ -84,6 +84,7 @@ Veja a pasta `docs/`:
 - `language-spec.md` – Manual da linguagem (tipos, sintaxe, concorrência).
 - `stdlib-reference.md` – Referência da biblioteca padrão.
 - `compiler-design.md` – Visão de alto nível do compilador e pipeline.
+- `propostas-novidades.md` – Roadmap sugerido de funcionalidades para evolução da linguagem.
 
 ---
 
