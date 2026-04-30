@@ -87,17 +87,20 @@ impl CodeGen {
                 } else {
                     chunk.emit(Op::PushNull);
                 }
-                if let crate::ast::pattern::Pattern::Ident(name, _) = pattern {
-                    let idx = self.locals.len();
-                    self.declare_local(name);
-                    chunk.emit(Op::StoreLocal(idx));
-                } else {
-                    chunk.emit(Op::Pop);
+                match pattern {
+                    crate::ast::pattern::Pattern::Ident(name, _)
+                    | crate::ast::pattern::Pattern::MutIdent(name, _) => {
+                        let idx = self.locals.len();
+                        self.declare_local(name);
+                        chunk.emit(Op::StoreLocal(idx));
+                    }
+                    _ => {
+                        chunk.emit(Op::Pop);
+                    }
                 }
             }
             StmtKind::Const { ident, init, .. } => {
                 self.compile_expr(init, chunk);
-            if let crate::ast::pattern::Pattern::Ident(name, _) | crate::ast::pattern::Pattern::MutIdent(name, _) = pattern {
                 let idx = self.locals.len();
                 self.declare_local(ident);
                 chunk.emit(Op::StoreLocal(idx));
